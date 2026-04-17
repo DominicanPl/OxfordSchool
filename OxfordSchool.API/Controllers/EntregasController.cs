@@ -1,0 +1,108 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using OxfordSchool.API.Data;
+using OxfordSchool.API.DTOs;
+using OxfordSchool.API.Models;
+
+namespace OxfordSchool.API.Controllers;
+
+[ApiController]
+[Authorize]
+[Route("api/[controller]")]
+public class EntregasController(OxfordSchoolDbContext context) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IActionResult> Get()
+    {
+        var usuarioId = ObtenerUsuarioId();
+        var esEstudiante = User.IsInRole("Estudiante");
+
+        var entregas = await context.Entregas
+            .Include(e => e.Estudiante)
+            .Include(e => e.Tarea)
+            .Where(e => !esEstudiante || (usuarioId.HasValue && e.EstudianteId == usuarioId.Value))
+            .Select(e => new
+            {
+                e.Id,
+                e.ArchivoAdjuntoUrl,
+                e.Calificacion,
+                e.ComentarioDocente,
+                e.EstudianteId,
+                EstudianteNombre = e.Estudiante != null ? e.Estudiante.Nombre : "",
+                e.TareaId,
+                TareaTitulo = e.Tarea != null ? e.Tarea.Titulo : ""
+            })
+            .ToListAsync();
+
+        return Ok(entregas);
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Estudiante")]
+    public async Task<IActionResult> Post([FromBody] CreateEntregaRequest request)
+    {
+        var estudianteId = ObtenerUsuarioId();
+        if (estudianteId is null)
+        {
+            return Unauthorized(new { message = "No se pudo identificar el usuario autenticado." });
+        }
+
+        var estudiante = await context.Usuarios.FirstOrDefaultAsync(u => u.Id == estudianteId.Value && u.Rol == "Estudiante");
+        if (estudiante is null)
+        {
+            return BadRequest(new { message = "Estudiante no encontrado." });
+        }
+
+        var tarea = await context.Tareas.FindAsync(request.TareaId);
+        if (tarea is null)
+        {
+            return BadRequest(new { message = "Tarea no encontrada." });
+        }
+
+        var existeEntrega = await context.Entregas.AnyAsync(e => e.TareaId == request.TareaId && e.EstudianteId == estudianteId.Value);
+        if (existeEntrega)
+        {
+            return Conflict(new { message = "Ya existe una entrega para esta tarea." });
+        }
+
+        var entrega = new Entrega
+        {
+            ArchivoAdjuntoUrl = request.ArchivoAdjuntoUrl,
+            EstudianteId = estudianteId.Value,
+            TareaId = request.TareaId
+        };
+
+        context.Entregas.Add(entrega);
+        await context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(Get), new { id = entrega.Id }, entrega);
+    }
+
+    [HttpPut("{id:int}/calificar")]
+    [Authorize(Roles = "Docente")]
+    public async Task<IActionResult> Calificar(int id, [FromBody] CalificarEntregaRequest request)
+    {
+        var entrega = await context.Entregas.FindAsync(id);
+        if (entrega is null)
+        {
+            return NotFound(new { message = "Entrega no encontrada." });
+        }
+
+        entrega.Calificacion = request.Calificacion;
+        entrega.ComentarioDocente = request.ComentarioDocente;
+        await context.SaveChangesAsync();
+
+        return Ok(new { message = "Entrega calificada correctamente." });
+    }
+
+    private int? ObtenerUsuarioId()
+    {
+        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue(ClaimTypes.Name)
+            ?? User.FindFirstValue("sub");
+
+        return int.TryParse(sub, out var id) ? id : null;
+    }
+}

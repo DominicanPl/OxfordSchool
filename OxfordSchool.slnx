@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="OxfordSchool.API/OxfordSchool.API.csproj" />
+  <Project Path="OxfordSchool.Tests/OxfordSchool.Tests.csproj" />
+</Solution>
