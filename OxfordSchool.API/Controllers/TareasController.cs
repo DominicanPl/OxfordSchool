@@ -42,6 +42,39 @@ public class TareasController(OxfordSchoolDbContext context) : ControllerBase
         return Ok(tareas);
     }
 
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var estudianteId = ObtenerUsuarioId();
+        var esEstudiante = User.IsInRole("Estudiante");
+
+        var tarea = await context.Tareas
+            .Include(t => t.Materia)
+            .Where(t => t.Id == id)
+            .Select(t => new
+            {
+                t.Id,
+                t.Titulo,
+                t.Descripcion,
+                t.FechaLimite,
+                t.MateriaId,
+                MateriaNombre = t.Materia != null ? t.Materia.Nombre : "",
+                Estado = esEstudiante && estudianteId.HasValue
+                    ? (context.Entregas.Any(e => e.TareaId == t.Id && e.EstudianteId == estudianteId.Value)
+                        ? "Entregada"
+                        : (t.FechaLimite < DateTime.UtcNow ? "Tarde" : "Pendiente"))
+                    : null
+            })
+            .FirstOrDefaultAsync();
+
+        if (tarea is null)
+        {
+            return NotFound(new { message = "Tarea no encontrada." });
+        }
+
+        return Ok(tarea);
+    }
+
     [HttpPost]
     [Authorize(Roles = "Docente")]
     public async Task<IActionResult> Post([FromBody] CreateTareaRequest request)
@@ -79,7 +112,14 @@ public class TareasController(OxfordSchoolDbContext context) : ControllerBase
         context.Tareas.Add(tarea);
         await context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(Get), new { id = tarea.Id }, tarea);
+        return CreatedAtAction(nameof(GetById), new { id = tarea.Id }, new
+        {
+            tarea.Id,
+            tarea.Titulo,
+            tarea.Descripcion,
+            tarea.FechaLimite,
+            tarea.MateriaId
+        });
     }
 
     private int? ObtenerUsuarioId()
