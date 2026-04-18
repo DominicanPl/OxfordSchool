@@ -7,7 +7,13 @@ using OxfordSchool.API.Data;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+
+// 1. Configuracion simplificada de Swagger UI (Swashbuckle)
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(); // <-- ¡Déjalo vacío!
+
 builder.Services.AddOpenApi();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
@@ -42,6 +48,10 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    
+    // 2. Middleware para Swagger simplificado
+    app.UseSwagger();
+    app.UseSwaggerUI(); // <-- ¡Déjalo vacío también!
 }
 
 app.UseHttpsRedirection();

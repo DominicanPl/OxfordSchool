@@ -1,4 +1,6 @@
-<Solution>
-  <Project Path="OxfordSchool.API/OxfordSchool.API.csproj" />
-  <Project Path="OxfordSchool.Tests/OxfordSchool.Tests.csproj" />
+﻿<Solution>
+  <Project Path='OxfordSchool.API/OxfordSchool.API.csproj' />
+  <Project Path='OxfordSchool.Tests/OxfordSchool.Tests.csproj' />
+  <Project Path='Tests.UI.OxfordSchool/Tests.UI.OxfordSchool.csproj' />
 </Solution>
+
