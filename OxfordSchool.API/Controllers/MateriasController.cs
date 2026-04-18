@@ -51,8 +51,8 @@ public class MateriasController(OxfordSchoolDbContext context) : ControllerBase
             return Unauthorized(new { message = "No se pudo identificar el usuario autenticado." });
         }
 
-        var docente = await context.Usuarios.FirstOrDefaultAsync(u => u.Id == docenteId.Value && u.Rol == "Docente");
-        if (docente is null)
+        var docenteExiste = await context.Usuarios.AnyAsync(u => u.Id == docenteId.Value && u.Rol == "Docente");
+        if (!docenteExiste)
         {
             return BadRequest(new { message = "Docente no encontrado." });
         }
@@ -66,7 +66,7 @@ public class MateriasController(OxfordSchoolDbContext context) : ControllerBase
         context.Materias.Add(materia);
         await context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetById), new { id = materia.Id }, materia);
+        return CreatedAtAction(nameof(GetById), new { id = materia.Id }, new { materia.Id, materia.Nombre, materia.DocenteId });
     }
 
     [HttpPut("{id:int}")]
