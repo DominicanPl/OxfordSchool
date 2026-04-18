@@ -169,6 +169,33 @@ public class EntregasController(OxfordSchoolDbContext context) : ControllerBase
         return Ok(new { message = "Entrega calificada correctamente." });
     }
 
+    [HttpGet("mis-calificaciones")]
+    [Authorize(Roles = "Estudiante")]
+    public async Task<IActionResult> MisCalificaciones()
+    {
+        var estudianteId = ObtenerUsuarioId();
+        if (estudianteId is null)
+        {
+            return Unauthorized(new { message = "No se pudo identificar el usuario autenticado." });
+        }
+
+        var calificaciones = await context.Entregas
+            .Include(e => e.Tarea)
+            .Where(e => e.EstudianteId == estudianteId.Value && e.Calificacion.HasValue)
+            .OrderByDescending(e => e.Id)
+            .Select(e => new
+            {
+                e.Id,
+                e.TareaId,
+                TareaTitulo = e.Tarea != null ? e.Tarea.Titulo : "",
+                e.Calificacion,
+                e.ComentarioDocente
+            })
+            .ToListAsync();
+
+        return Ok(calificaciones);
+    }
+
     private int? ObtenerUsuarioId()
     {
         var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
