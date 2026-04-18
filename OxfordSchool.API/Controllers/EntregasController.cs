@@ -43,6 +43,47 @@ public class EntregasController(OxfordSchoolDbContext context) : ControllerBase
         return Ok(entregas);
     }
 
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var usuarioId = ObtenerUsuarioId();
+        if (usuarioId is null)
+        {
+            return Unauthorized(new { message = "No se pudo identificar el usuario autenticado." });
+        }
+
+        var esEstudiante = User.IsInRole("Estudiante");
+        var esDocente = User.IsInRole("Docente");
+
+        var entrega = await context.Entregas
+            .Include(e => e.Estudiante)
+            .Include(e => e.Tarea)
+            .ThenInclude(t => t!.Materia)
+            .Where(e => e.Id == id)
+            .Where(e =>
+                (esEstudiante && e.EstudianteId == usuarioId.Value)
+                || (esDocente && e.Tarea != null && e.Tarea.Materia != null && e.Tarea.Materia.DocenteId == usuarioId.Value))
+            .Select(e => new
+            {
+                e.Id,
+                e.ArchivoAdjuntoUrl,
+                e.Calificacion,
+                e.ComentarioDocente,
+                e.EstudianteId,
+                EstudianteNombre = e.Estudiante != null ? e.Estudiante.Nombre : "",
+                e.TareaId,
+                TareaTitulo = e.Tarea != null ? e.Tarea.Titulo : ""
+            })
+            .FirstOrDefaultAsync();
+
+        if (entrega is null)
+        {
+            return NotFound(new { message = "Entrega no encontrada." });
+        }
+
+        return Ok(entrega);
+    }
+
     [HttpPost]
     [Authorize(Roles = "Estudiante")]
     public async Task<IActionResult> Post([FromBody] CreateEntregaRequest request)
@@ -81,7 +122,15 @@ public class EntregasController(OxfordSchoolDbContext context) : ControllerBase
         context.Entregas.Add(entrega);
         await context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(Get), new { id = entrega.Id }, entrega);
+        return CreatedAtAction(nameof(GetById), new { id = entrega.Id }, new
+        {
+            entrega.Id,
+            entrega.ArchivoAdjuntoUrl,
+            entrega.Calificacion,
+            entrega.ComentarioDocente,
+            entrega.EstudianteId,
+            entrega.TareaId
+        });
     }
 
     [HttpPut("{id:int}/calificar")]
