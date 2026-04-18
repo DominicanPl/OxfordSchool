@@ -18,11 +18,15 @@ public class EntregasController(OxfordSchoolDbContext context) : ControllerBase
     {
         var usuarioId = ObtenerUsuarioId();
         var esEstudiante = User.IsInRole("Estudiante");
+        var esDocente = User.IsInRole("Docente");
 
         var entregas = await context.Entregas
             .Include(e => e.Estudiante)
             .Include(e => e.Tarea)
-            .Where(e => !esEstudiante || (usuarioId.HasValue && e.EstudianteId == usuarioId.Value))
+            .ThenInclude(t => t!.Materia)
+            .Where(e =>
+                (esEstudiante && usuarioId.HasValue && e.EstudianteId == usuarioId.Value)
+                || (esDocente && usuarioId.HasValue && e.Tarea != null && e.Tarea.Materia != null && e.Tarea.Materia.DocenteId == usuarioId.Value))
             .Select(e => new
             {
                 e.Id,
@@ -84,10 +88,29 @@ public class EntregasController(OxfordSchoolDbContext context) : ControllerBase
     [Authorize(Roles = "Docente")]
     public async Task<IActionResult> Calificar(int id, [FromBody] CalificarEntregaRequest request)
     {
-        var entrega = await context.Entregas.FindAsync(id);
+        var docenteId = ObtenerUsuarioId();
+        if (docenteId is null)
+        {
+            return Unauthorized(new { message = "No se pudo identificar el usuario autenticado." });
+        }
+
+        var entrega = await context.Entregas
+            .Include(e => e.Tarea)
+            .ThenInclude(t => t!.Materia)
+            .FirstOrDefaultAsync(e => e.Id == id);
         if (entrega is null)
         {
             return NotFound(new { message = "Entrega no encontrada." });
+        }
+
+        if (entrega.Tarea?.Materia is null)
+        {
+            return BadRequest(new { message = "La entrega no tiene materia asociada." });
+        }
+
+        if (entrega.Tarea.Materia.DocenteId != docenteId.Value)
+        {
+            return Forbid();
         }
 
         entrega.Calificacion = request.Calificacion;

@@ -46,15 +46,26 @@ public class TareasController(OxfordSchoolDbContext context) : ControllerBase
     [Authorize(Roles = "Docente")]
     public async Task<IActionResult> Post([FromBody] CreateTareaRequest request)
     {
+        var docenteId = ObtenerUsuarioId();
+        if (docenteId is null)
+        {
+            return Unauthorized(new { message = "No se pudo identificar el usuario autenticado." });
+        }
+
         if (request.FechaLimite <= DateTime.UtcNow)
         {
             return BadRequest(new { message = "La fecha límite debe ser mayor a la fecha actual." });
         }
 
-        var materiaExiste = await context.Materias.AnyAsync(m => m.Id == request.MateriaId);
-        if (!materiaExiste)
+        var materia = await context.Materias.FirstOrDefaultAsync(m => m.Id == request.MateriaId);
+        if (materia is null)
         {
             return BadRequest(new { message = "Materia no encontrada." });
+        }
+
+        if (materia.DocenteId != docenteId.Value)
+        {
+            return Forbid();
         }
 
         var tarea = new Tarea
